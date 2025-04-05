@@ -1,0 +1,2 @@
+game = BalatroGame();
+game.run();

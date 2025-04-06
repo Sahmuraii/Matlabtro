@@ -1,7 +1,7 @@
 classdef BalatroUI < handle
     properties
         game 
-        card_objects = struct('rect', {}, 'text', {})
+        card_objects = struct('rect', {}, 'rank_text', {}, 'suit_symbol', {}, 'rank_text_bottom', {})
     end
     
     methods
@@ -72,16 +72,27 @@ classdef BalatroUI < handle
         function highlight_selected(obj)
             if strcmp(obj.game.current_mode, 'card_play') && ...
                ~isempty(obj.card_objects) && ...
-               isvalid(obj.game.ax_handles(1))
+               ishandle(obj.game.ax_handles(1))
                
                 for i = 1:length(obj.card_objects)
-                    if isvalid(obj.card_objects(i).rect)
-                        if ismember(i, obj.game.selected_cards)
-                            obj.card_objects(i).rect.FaceColor = [0.8 0.9 1];
-                            obj.card_objects(i).rect.LineWidth = 3;
+                    if isfield(obj.card_objects(i), 'rect') && ishandle(obj.card_objects(i).rect)
+                        card = obj.game.hand{i};
+                        if any(strcmpi(card.suit, {'Hearts', 'Diamonds'}))
+                            base_color = [1 0.8 0.8];
                         else
-                            obj.card_objects(i).rect.FaceColor = 'white';
-                            obj.card_objects(i).rect.LineWidth = 2;
+                            base_color = [0.9 0.9 0.95];
+                        end
+                        
+                        if ismember(i, obj.game.selected_cards)
+                            set(obj.card_objects(i).rect, ...
+                                'FaceColor', [0.8 0.9 1], ...
+                                'LineWidth', 3, ...
+                                'EdgeColor', [0 0.5 1]);
+                        else
+                            set(obj.card_objects(i).rect, ...
+                                'FaceColor', base_color, ...
+                                'LineWidth', 2, ...
+                                'EdgeColor', 'k');
                         end
                     end
                 end
@@ -92,51 +103,126 @@ classdef BalatroUI < handle
         function display_hand(obj)
             if strcmp(obj.game.current_mode, 'card_play') && ...
                ~isempty(obj.game.ax_handles) && ...
-               all(isvalid(obj.game.ax_handles))
+               all(ishandle(obj.game.ax_handles))
                
                 try
+                    % Clear existing cards
                     if ~isempty(obj.card_objects)
                         for i = 1:length(obj.card_objects)
-                            if isvalid(obj.card_objects(i).rect)
+                            if isfield(obj.card_objects(i), 'rect') && ishandle(obj.card_objects(i).rect)
                                 delete(obj.card_objects(i).rect);
                             end
-                            if isvalid(obj.card_objects(i).text)
-                                delete(obj.card_objects(i).text);
+                            if isfield(obj.card_objects(i), 'rank_text') && ishandle(obj.card_objects(i).rank_text)
+                                delete(obj.card_objects(i).rank_text);
+                            end
+                            if isfield(obj.card_objects(i), 'suit_symbol') && ishandle(obj.card_objects(i).suit_symbol)
+                                delete(obj.card_objects(i).suit_symbol);
+                            end
+                            if isfield(obj.card_objects(i), 'rank_text_bottom') && ishandle(obj.card_objects(i).rank_text_bottom)
+                                delete(obj.card_objects(i).rank_text_bottom);
                             end
                         end
                     end
                     
+                    % Card display parameters
                     num_cards = length(obj.game.hand);
-                    card_width = min(0.8/num_cards, 0.15);
-                    margin = (1 - num_cards*card_width)/2;
+                    card_aspect_ratio = 0.7; % Standard playing card ratio
+                    card_height = 0.4; % Height of cards
+                    card_width = card_height * card_aspect_ratio;
                     
-                    obj.card_objects = struct('rect', {}, 'text', {});
+                    % Spacing and layout
+                    card_spacing = 0.015;
+                    total_width = num_cards*card_width + (num_cards-1)*card_spacing;
+                    margin = (1 - total_width)/2;
+                    
+                    obj.card_objects = struct('rect', {}, 'rank_text', {}, ...
+                                             'suit_symbol', {}, 'rank_text_bottom', {});
+                    
                     for i = 1:num_cards
-                        x_pos = margin + (i-1)*card_width;
+                        % Calculate position with spacing
+                        x_pos = margin + (i-1)*(card_width + card_spacing);
                         card = obj.game.hand{i};
                         
+                        % Determine card appearance
+                        if strcmpi(card.suit, 'Hearts')
+                            symbol = '♥';
+                            symbol_color = [0.7 0 0];
+                            card_color = [1 0.8 0.8];
+                            text_color = [0.7 0 0];
+                        elseif strcmpi(card.suit, 'Diamonds')
+                            symbol = '♦';
+                            symbol_color = [0.9 0.5 0];
+                            card_color = [1 0.95 0.9];
+                            text_color = [0.9 0.5 0];
+                        elseif strcmpi(card.suit, 'Clubs')
+                            symbol = '♣';
+                            symbol_color = [0 0.6 0];
+                            card_color = [0.85 0.95 0.85];
+                            text_color = [0 0.6 0];
+                        elseif strcmpi(card.suit, 'Spades')
+                            symbol = '♠';
+                            symbol_color = [0 0 0];
+                            card_color = [0.95 0.95 0.95];
+                            text_color = [0 0 0];
+                        else
+                            symbol = card.suit(1);
+                            symbol_color = [0 0 0];
+                            card_color = [1 1 1];
+                            text_color = [0 0 0];
+                        end
+                        
+                        % Create card rectangle
                         obj.card_objects(i).rect = rectangle(...
-                            'Position', [x_pos, 0.3, card_width, 0.4], ...
-                            'FaceColor', 'white', ...
+                            'Position', [x_pos, 0.3, card_width, card_height], ...
+                            'FaceColor', card_color, ...
                             'EdgeColor', 'k', ...
                             'LineWidth', 2, ...
+                            'Curvature', [0.1 0.1], ...
                             'Parent', obj.game.ax_handles(1), ...
                             'ButtonDownFcn', @(~,~) obj.card_clicked(i));
                         
-                        obj.card_objects(i).text = text(...
-                            x_pos + card_width/2, 0.5, ...
-                            sprintf('%s\n%s', card.rank, card.suit), ...
+                        % Create rank text (top left)
+                        obj.card_objects(i).rank_text = text(...
+                            x_pos + 0.02, 0.3 + card_height - 0.05, ...
+                            card.rank, ...
+                            'Color', text_color, ...
+                            'FontSize', 14, ...
+                            'FontWeight', 'bold', ...
+                            'HorizontalAlignment', 'left', ...
+                            'Parent', obj.game.ax_handles(1));
+                        
+                        % Create suit symbol (center)
+                        obj.card_objects(i).suit_symbol = text(...
+                            x_pos + card_width/2, 0.3 + card_height/2, ...
+                            symbol, ...
+                            'Color', symbol_color, ...
+                            'FontSize', 24, ...
+                            'FontWeight', 'bold', ...
                             'HorizontalAlignment', 'center', ...
                             'Parent', obj.game.ax_handles(1));
+                        
+                        % Create rank text (bottom right, upside down)
+                        obj.card_objects(i).rank_text_bottom = text(...
+                            x_pos + card_width - 0.02, 0.3 + 0.07, ...
+                            card.rank, ...
+                            'Color', text_color, ...
+                            'FontSize', 14, ...
+                            'FontWeight', 'bold', ...
+                            'HorizontalAlignment', 'left', ...
+                            'Rotation', 180, ...
+                            'Parent', obj.game.ax_handles(1), ...
+                            'Margin', .5);
                     end
                     
-                    if isvalid(obj.game.fig_handle)
+                    % Update counters
+                    if ishandle(obj.game.fig_handle)
                         CardGraphics.update_counters(...
                             obj.game.fig_handle, ...
                             obj.game.hands_remaining, ...
                             obj.game.discards_remaining);
                     end
                     
+                    % Update highlights
                     obj.highlight_selected();
                     
                 catch ME
@@ -149,14 +235,14 @@ classdef BalatroUI < handle
         function update_discard_display(obj, card_indices)
             if ~isempty(obj.card_objects)
                 for idx = card_indices
-                    if idx <= length(obj.card_objects)
+                    if idx <= length(obj.card_objects) && isfield(obj.card_objects(idx), 'rect') && ishandle(obj.card_objects(idx).rect)
                         set(obj.card_objects(idx).rect, ...
                             'FaceColor', [1 0.7 0.7], ...
                             'LineWidth', 3);
                     end
                 end
                 drawnow;
-                pause(0.3); 
+                pause(0.3);
             end
         end
         

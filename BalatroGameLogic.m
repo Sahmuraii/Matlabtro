@@ -44,6 +44,8 @@ classdef BalatroGameLogic < handle
                     error('Failed to create valid Blind object');
                 end
                 
+                new_blind.set_config(obj.game.ante_level, obj.game.stake_level);
+                
                 obj.future_blinds{end+1} = new_blind;
             end
         end

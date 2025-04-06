@@ -14,12 +14,33 @@ classdef BalatroPlayerActions < handle
                 return;
             end
             
-            obj.game.logic.select_cards(obj.game.selected_cards);
+            valid_indices = obj.game.selected_cards(obj.game.selected_cards <= length(obj.game.hand));
+            if isempty(valid_indices)
+                fprintf('No valid cards selected\n');
+                return;
+            end
+            
+            obj.game.played_cards = obj.game.hand(valid_indices);
+            
+            obj.game.hand(valid_indices) = [];
+            
+            for i = 1:length(valid_indices)
+                if ~isempty(obj.game.deck)
+                    obj.game.hand{end+1} = obj.game.deck{1};
+                    obj.game.deck(1) = [];
+                end
+            end
+            
+            obj.game.selected_cards = [];
+            
+            obj.game.hands_remaining = obj.game.hands_remaining - 1;
+            
             obj.game.evaluator.play_hand();
             
-            if isvalid(obj.game.fig_handle) && obj.game.waiting_for_input
-                obj.game.waiting_for_input = false;
-                uiresume(obj.game.fig_handle);
+            obj.game.ui.display_hand();
+            
+            if isempty(obj.game.deck)
+                obj.game.logic.initialize_deck();
             end
         end
         
@@ -34,9 +55,13 @@ classdef BalatroPlayerActions < handle
                 return;
             end
             
-            obj.game.logic.discard_cards(obj.game.selected_cards);
-            obj.game.discards_remaining = obj.game.discards_remaining - 1;
-            obj.game.logic.draw_hand(8); 
+            valid_indices = obj.game.selected_cards(obj.game.selected_cards <= length(obj.game.hand));
+            if ~isempty(valid_indices)
+                obj.game.logic.discard_cards(valid_indices);
+                
+                obj.game.selected_cards = [];
+                obj.game.ui.highlight_selected();
+            end
             
             if isvalid(obj.game.fig_handle) && obj.game.waiting_for_input
                 obj.game.waiting_for_input = false;

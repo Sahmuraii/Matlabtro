@@ -13,6 +13,7 @@ classdef BalatroHandEvaluation < handle
                 error('No cards played');
             end
             
+            num_cards = length(obj.game.played_cards);
             ranks = cellfun(@(c) c.rank, obj.game.played_cards, 'UniformOutput', false);
             suits = cellfun(@(c) c.suit, obj.game.played_cards, 'UniformOutput', false);
             values = cellfun(@(c) c.value, obj.game.played_cards);
@@ -20,38 +21,62 @@ classdef BalatroHandEvaluation < handle
             unique_suits = unique(suits);
             unique_ranks = unique(ranks);
             num_suits = length(unique_suits);
-            num_ranks = length(unique_ranks);
             counts = histcounts(categorical(ranks), categorical(unique_ranks));
             
-            if num_suits == 1 && num_ranks == 5
-                if ismember('A', ranks) && ismember('K', ranks) && ...
-                   ismember('Q', ranks) && ismember('J', ranks) && ismember('10', ranks)
+            if num_cards == 5
+                if any(counts == 5)
+                    hand_type = 'Five of a Kind';
+                elseif num_suits == 1 && ...
+                       ismember('A', ranks) && ismember('K', ranks) && ...
+                       ismember('Q', ranks) && ismember('J', ranks) && ismember('10', ranks)
                     hand_type = 'Royal Flush';
-                else
+                elseif num_suits == 1 && ...
+                       (max(values) - min(values) == 4 || ...  
+                       (ismember('A', ranks) && ismember('2', ranks) && ...  
+                       ismember('3', ranks) && ismember('4', ranks) && ismember('5', ranks)))
                     hand_type = 'Straight Flush';
+                elseif num_suits == 1 && any(counts == 5)
+                    hand_type = 'Flush Five';
+                elseif num_suits == 1 && any(counts == 3) && any(counts == 2)
+                    hand_type = 'Flush House';
+                elseif any(counts == 4)
+                    hand_type = 'Four of a Kind';
+                elseif any(counts == 3) && any(counts == 2)
+                    hand_type = 'Full House';
+                elseif num_suits == 1
+                    hand_type = 'Flush';
+                elseif (max(values) - min(values) == 4 || ...  
+                       (ismember('A', ranks) && ismember('2', ranks) && ...  
+                       ismember('3', ranks) && ismember('4', ranks) && ismember('5', ranks)))
+                    hand_type = 'Straight';
                 end
-            elseif any(counts == 4)
-                hand_type = 'Four of a Kind';
-            elseif any(counts == 3) && any(counts == 2)
-                hand_type = 'Full House';
-            elseif num_suits == 1
-                hand_type = 'Flush';
-            elseif num_ranks == 5 && (max(values) - min(values)) == 4
-                hand_type = 'Straight';
-            elseif any(counts == 3)
-                hand_type = 'Three of a Kind';
-            elseif sum(counts == 2) == 2
-                hand_type = 'Two Pair';
-            elseif any(counts == 2)
-                hand_type = 'Pair';
-            else
-                hand_type = 'High Card';
+            end
+            
+            if ~exist('hand_type', 'var') 
+                if any(counts == 5)
+                    hand_type = 'Five of a Kind';
+                elseif any(counts == 4)
+                    hand_type = 'Four of a Kind';
+                elseif any(counts == 3) && any(counts == 2)
+                    hand_type = 'Full House';
+                elseif any(counts == 3)
+                    hand_type = 'Three of a Kind';
+                elseif sum(counts == 2) == 2
+                    hand_type = 'Two Pair';
+                elseif any(counts == 2)
+                    hand_type = 'Pair';
+                else
+                    hand_type = 'High Card';
+                end
             end
             
             switch hand_type
                 case 'Royal Flush', base_score = 100; base_mult = 8;
                 case 'Straight Flush', base_score = 100; base_mult = 8;
+                case 'Five of a Kind', base_score = 120; base_mult = 12;
+                case 'Flush Five', base_score = 80; base_mult = 8;
                 case 'Four of a Kind', base_score = 60; base_mult = 7;
+                case 'Flush House', base_score = 50; base_mult = 5;
                 case 'Full House', base_score = 40; base_mult = 4;
                 case 'Flush', base_score = 35; base_mult = 4;
                 case 'Straight', base_score = 30; base_mult = 4;
@@ -61,7 +86,7 @@ classdef BalatroHandEvaluation < handle
                 case 'High Card', base_score = 5; base_mult = 1;
             end
             
-            hand_score = round(base_score + sum(values) * base_mult);
+            hand_score = round((base_score + sum(values)) * base_mult);
         end
         
         function play_hand(obj)
@@ -76,19 +101,21 @@ classdef BalatroHandEvaluation < handle
             fprintf('Hand Score: %d\n', hand_score);
             fprintf('Blind Target: %d\n', obj.game.current_blind.chips);
             
-            if hand_score >= obj.game.current_blind.chips
+            obj.game.cumulative_score = obj.game.cumulative_score + hand_score;
+            fprintf('Total Score So Far: %d\n', obj.game.cumulative_score);
+            
+            if obj.game.cumulative_score >= obj.game.current_blind.chips
                 obj.game.score = obj.game.score + obj.game.current_blind.dollars;
                 fprintf('SUCCESS! Defeated %s\n', obj.game.current_blind.name);
-                fprintf('Earned $%d (Total: $%d)\n\n', ...
-                       obj.game.current_blind.dollars, obj.game.score);
                 obj.game.current_blind.defeat();
-                
-                if isvalid(obj.game.fig_handle)
-                    close(obj.game.fig_handle);
-                end
             else
-                fprintf('FAILED! Need %d more points\n\n', ...
-                       obj.game.current_blind.chips - hand_score);
+                fprintf('Need %d more points\n\n', ...
+                    obj.game.current_blind.chips - obj.game.cumulative_score);
+            end
+            
+            obj.game.waiting_for_input = false;
+            if isvalid(obj.game.fig_handle)
+                uiresume(obj.game.fig_handle);
             end
         end
     end

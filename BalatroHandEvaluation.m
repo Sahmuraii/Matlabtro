@@ -21,52 +21,85 @@ classdef BalatroHandEvaluation < handle
             unique_suits = unique(suits);
             unique_ranks = unique(ranks);
             num_suits = length(unique_suits);
-            counts = histcounts(categorical(ranks), categorical(unique_ranks));
+            
+            [counts, rank_indices] = histcounts(categorical(ranks), categorical(unique_ranks));
+            
+            relevant_card_indices = [];
             
             if num_cards == 5
                 if any(counts == 5)
                     hand_type = 'Five of a Kind';
+                    relevant_card_indices = 1:5;
                 elseif num_suits == 1 && ...
                        ismember('A', ranks) && ismember('K', ranks) && ...
                        ismember('Q', ranks) && ismember('J', ranks) && ismember('10', ranks)
                     hand_type = 'Royal Flush';
+                    relevant_card_indices = 1:5;
                 elseif num_suits == 1 && ...
                        (max(values) - min(values) == 4 || ...  
                        (ismember('A', ranks) && ismember('2', ranks) && ...  
                        ismember('3', ranks) && ismember('4', ranks) && ismember('5', ranks)))
                     hand_type = 'Straight Flush';
+                    relevant_card_indices = 1:5;
                 elseif num_suits == 1 && any(counts == 5)
                     hand_type = 'Flush Five';
+                    relevant_card_indices = 1:5;
                 elseif num_suits == 1 && any(counts == 3) && any(counts == 2)
                     hand_type = 'Flush House';
+                    relevant_card_indices = 1:5;
                 elseif any(counts == 4)
                     hand_type = 'Four of a Kind';
+                    four_kind_rank = unique_ranks{counts == 4};
+                    relevant_card_indices = find(strcmp(ranks, four_kind_rank));
                 elseif any(counts == 3) && any(counts == 2)
                     hand_type = 'Full House';
+                    three_kind_rank = unique_ranks{counts == 3};
+                    pair_rank = unique_ranks{counts == 2};
+                    relevant_card_indices = [find(strcmp(ranks, three_kind_rank)), find(strcmp(ranks, pair_rank))];
                 elseif num_suits == 1
                     hand_type = 'Flush';
+                    relevant_card_indices = 1:5;
                 elseif (max(values) - min(values) == 4 || ...  
                        (ismember('A', ranks) && ismember('2', ranks) && ...  
                        ismember('3', ranks) && ismember('4', ranks) && ismember('5', ranks)))
                     hand_type = 'Straight';
+                    relevant_card_indices = 1:5;
                 end
             end
             
             if ~exist('hand_type', 'var') 
                 if any(counts == 5)
                     hand_type = 'Five of a Kind';
+                    five_kind_rank = unique_ranks{counts == 5};
+                    relevant_card_indices = find(strcmp(ranks, five_kind_rank));
                 elseif any(counts == 4)
                     hand_type = 'Four of a Kind';
+                    four_kind_rank = unique_ranks{counts == 4};
+                    relevant_card_indices = find(strcmp(ranks, four_kind_rank));
                 elseif any(counts == 3) && any(counts == 2)
                     hand_type = 'Full House';
+                    three_kind_rank = unique_ranks{counts == 3};
+                    pair_rank = unique_ranks{counts == 2};
+                    relevant_card_indices = [find(strcmp(ranks, three_kind_rank)), find(strcmp(ranks, pair_rank))];
                 elseif any(counts == 3)
                     hand_type = 'Three of a Kind';
+                    three_kind_rank = unique_ranks{counts == 3};
+                    relevant_card_indices = find(strcmp(ranks, three_kind_rank));
                 elseif sum(counts == 2) == 2
                     hand_type = 'Two Pair';
+                    pair_ranks = unique_ranks(counts == 2);
+                    relevant_card_indices = [];
+                    for i = 1:length(pair_ranks)
+                        relevant_card_indices = [relevant_card_indices, find(strcmp(ranks, pair_ranks{i}))];
+                    end
                 elseif any(counts == 2)
                     hand_type = 'Pair';
+                    pair_rank = unique_ranks{counts == 2};
+                    relevant_card_indices = find(strcmp(ranks, pair_rank));
                 else
                     hand_type = 'High Card';
+                    [~, max_idx] = max(values);
+                    relevant_card_indices = max_idx;
                 end
             end
             
@@ -86,7 +119,8 @@ classdef BalatroHandEvaluation < handle
                 case 'High Card', base_score = 5; base_mult = 1;
             end
             
-            hand_score = round((base_score + sum(values)) * base_mult);
+            relevant_values = values(relevant_card_indices);
+            hand_score = round((base_score + sum(relevant_values)) * base_mult);
         end
         
         function play_hand(obj)

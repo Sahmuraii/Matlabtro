@@ -2,11 +2,20 @@ classdef BalatroUI < handle
     properties
         game 
         card_objects = struct('rect', {}, 'rank_text', {}, 'suit_symbol', {}, 'rank_text_bottom', {})
+        score_text 
+        total_score_text
     end
     
     methods
         function obj = BalatroUI(game)
             obj.game = game;
+        end
+
+        function update_total_score_display(obj)
+            if ~isempty(obj.total_score_text) && ishandle(obj.total_score_text)
+                set(obj.total_score_text, 'String', sprintf('Total Score: %d / %d', ...
+                    obj.game.cumulative_score, obj.game.current_blind.chips));
+            end
         end
         
         function create_game_window(obj)
@@ -14,6 +23,22 @@ classdef BalatroUI < handle
                 [obj.game.fig_handle, obj.game.ax_handles] = CardGraphics.create_game_window(obj.game);
                 obj.game.fig_handle.UserData.ax_handles = obj.game.ax_handles;
                 obj.create_ui_buttons();
+                
+                if ~isempty(obj.game.ax_handles) && ishandle(obj.game.ax_handles(1))
+                    obj.score_text = text(0.5, 0.15, 'Selected: 0 pts', ...
+                        'Parent', obj.game.ax_handles(1), ...
+                        'HorizontalAlignment', 'center', ...
+                        'FontSize', 16, ...
+                        'FontWeight', 'bold', ...
+                        'Color', [0 0.4 0.8]);
+
+                    obj.total_score_text = text(0.5, 0.08, sprintf('Total Score: %d', obj.game.cumulative_score), ...
+                        'Parent', obj.game.ax_handles(1), ...
+                        'HorizontalAlignment', 'center', ...
+                        'FontSize', 18, ...
+                        'FontWeight', 'bold', ...
+                        'Color', [0.2 0.6 0.2]);
+                end
                 obj.update_display();
             else
                 if isfield(obj.game.fig_handle.UserData, 'ax_handles')
@@ -51,6 +76,63 @@ classdef BalatroUI < handle
             end
         end
         
+        function update_score_display(obj)
+            if ~isempty(obj.score_text) && ishandle(obj.score_text)
+                if isempty(obj.game.selected_cards)
+                    set(obj.score_text, 'String', 'Selected: 0 pts');
+                else
+                    obj.game.played_cards = {};
+                    for i = 1:length(obj.game.selected_cards)
+                        idx = obj.game.selected_cards(i);
+                        if idx <= length(obj.game.hand)
+                            obj.game.played_cards{end+1} = obj.game.hand{idx};
+                        end
+                    end
+                    
+                    if ~isempty(obj.game.played_cards) && length(obj.game.played_cards) > 0
+                        try
+                            evaluator = BalatroHandEvaluation(obj.game);
+                            [hand_type, hand_score] = evaluator.evaluate_hand();
+                            set(obj.score_text, 'String', sprintf('%s: %d pts', hand_type, hand_score));
+                        catch ME
+                            set(obj.score_text, 'String', 'Selected: ? pts');
+                        end
+                    else
+                        set(obj.score_text, 'String', 'Selected: 0 pts');
+                    end
+                    obj.game.played_cards = {};
+                end
+            end
+        end
+        
+        function score = calculate_simple_score(obj, cards)
+            score = 0;
+            if isempty(cards)
+                return;
+            end
+            
+            for i = 1:length(cards)
+                card = cards{i};
+                switch card.rank
+                    case 'A'
+                        score = score + 14;
+                    case 'K'
+                        score = score + 13;
+                    case 'Q'
+                        score = score + 12;
+                    case 'J'
+                        score = score + 11;
+                    case 'T'
+                        score = score + 10;
+                    otherwise
+                        rank_value = str2double(card.rank);
+                        if ~isnan(rank_value)
+                            score = score + rank_value;
+                        end
+                end
+            end
+        end
+        
         function card_clicked(obj, card_idx)
             if strcmp(obj.game.current_mode, 'card_play') && ...
                ~isempty(obj.game.ax_handles) && ...
@@ -66,6 +148,7 @@ classdef BalatroUI < handle
                     end
                 end
                 obj.highlight_selected();
+                obj.update_score_display();
             end
         end
         
@@ -124,13 +207,10 @@ classdef BalatroUI < handle
                         end
                     end
                     
-                    % Card display parameters
                     num_cards = length(obj.game.hand);
-                    card_aspect_ratio = 0.7; % Standard playing card ratio
-                    card_height = 0.4; % Height of cards
+                    card_aspect_ratio = 0.7; 
+                    card_height = 0.4; 
                     card_width = card_height * card_aspect_ratio;
-                    
-                    % Spacing and layout
                     card_spacing = 0.015;
                     total_width = num_cards*card_width + (num_cards-1)*card_spacing;
                     margin = (1 - total_width)/2;
@@ -139,11 +219,9 @@ classdef BalatroUI < handle
                                              'suit_symbol', {}, 'rank_text_bottom', {});
                     
                     for i = 1:num_cards
-                        % Calculate position with spacing
                         x_pos = margin + (i-1)*(card_width + card_spacing);
                         card = obj.game.hand{i};
                         
-                        % Determine card appearance
                         if strcmpi(card.suit, 'Hearts')
                             symbol = '♥';
                             symbol_color = [0.7 0 0];
@@ -171,7 +249,6 @@ classdef BalatroUI < handle
                             text_color = [0 0 0];
                         end
                         
-                        % Create card rectangle
                         obj.card_objects(i).rect = rectangle(...
                             'Position', [x_pos, 0.3, card_width, card_height], ...
                             'FaceColor', card_color, ...
@@ -181,7 +258,6 @@ classdef BalatroUI < handle
                             'Parent', obj.game.ax_handles(1), ...
                             'ButtonDownFcn', @(~,~) obj.card_clicked(i));
                         
-                        % Create rank text (top left)
                         obj.card_objects(i).rank_text = text(...
                             x_pos + 0.02, 0.3 + card_height - 0.05, ...
                             card.rank, ...
@@ -191,7 +267,6 @@ classdef BalatroUI < handle
                             'HorizontalAlignment', 'left', ...
                             'Parent', obj.game.ax_handles(1));
                         
-                        % Create suit symbol (center)
                         obj.card_objects(i).suit_symbol = text(...
                             x_pos + card_width/2, 0.3 + card_height/2, ...
                             symbol, ...
@@ -201,7 +276,6 @@ classdef BalatroUI < handle
                             'HorizontalAlignment', 'center', ...
                             'Parent', obj.game.ax_handles(1));
                         
-                        % Create rank text (bottom right, upside down)
                         obj.card_objects(i).rank_text_bottom = text(...
                             x_pos + card_width - 0.02, 0.3 + 0.07, ...
                             card.rank, ...
@@ -214,7 +288,6 @@ classdef BalatroUI < handle
                             'Margin', .5);
                     end
                     
-                    % Update counters
                     if ishandle(obj.game.fig_handle)
                         CardGraphics.update_counters(...
                             obj.game.fig_handle, ...
@@ -222,7 +295,29 @@ classdef BalatroUI < handle
                             obj.game.discards_remaining);
                     end
                     
-                    % Update highlights
+                    if isempty(obj.score_text) || ~ishandle(obj.score_text)
+                        obj.score_text = text(0.5, 0.15, 'Selected: 0 pts', ...
+                            'Parent', obj.game.ax_handles(1), ...
+                            'HorizontalAlignment', 'center', ...
+                            'FontSize', 16, ...
+                            'FontWeight', 'bold', ...
+                            'Color', [0 0.4 0.8]);
+                    end
+
+                    if isempty(obj.total_score_text) || ~ishandle(obj.total_score_text)
+                        obj.total_score_text = text(0.5, 0.08, sprintf('Total Score: %d / %d', ...
+                            obj.game.cumulative_score, obj.game.current_blind.chips), ...
+                            'Parent', obj.game.ax_handles(1), ...
+                            'HorizontalAlignment', 'center', ...
+                            'FontSize', 18, ...
+                            'FontWeight', 'bold', ...
+                            'Color', [0.2 0.6 0.2]);
+                    end
+                    
+                    obj.update_score_display();
+
+                    obj.update_total_score_display();
+                    
                     obj.highlight_selected();
                     
                 catch ME
@@ -301,6 +396,8 @@ classdef BalatroUI < handle
                     case 'blind_selection'
                         obj.display_blind_selection();
                 end
+                
+                obj.update_total_score_display();
             catch ME
                 fprintf('Error updating display: %s\n', ME.message);
                 obj.recover_axes();
@@ -318,6 +415,12 @@ classdef BalatroUI < handle
             end
             if isfield(obj.game.ui_controls, 'clear_button') && isvalid(obj.game.ui_controls.clear_button)
                 delete(obj.game.ui_controls.clear_button);
+            end
+            if ~isempty(obj.score_text) && ishandle(obj.score_text)
+                delete(obj.score_text);
+            end
+            if ~isempty(obj.total_score_text) && ishandle(obj.total_score_text)
+                delete(obj.total_score_text);
             end
         end
     end
